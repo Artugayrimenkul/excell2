@@ -13,21 +13,22 @@ from reportlab.pdfbase import pdfmetrics
 from reportlab.pdfbase.ttfonts import TTFont
 from PIL import Image
 
-# Register a font that supports Turkish characters
-FONT_PATH = "TurkishFont.ttf"
+# Register fonts that support Turkish characters
+REG_FONT = os.path.join(os.getcwd(), "TurkishFont.ttf")
+BOLD_FONT_FILE = os.path.join(os.getcwd(), "TurkishFont-Bold.ttf")
+MAIN_FONT = "Helvetica"
+BOLD_FONT = "Helvetica-Bold"
+
 try:
-    if os.path.exists(FONT_PATH):
-        pdfmetrics.registerFont(TTFont('TurkishFont', FONT_PATH))
-        pdfmetrics.registerFont(TTFont('TurkishFont-Bold', FONT_PATH)) # Use same for bold if needed or separate
+    if os.path.exists(REG_FONT):
+        pdfmetrics.registerFont(TTFont('TurkishFont', REG_FONT))
         MAIN_FONT = "TurkishFont"
-        BOLD_FONT = "TurkishFont" # In a real case we'd use a bold .ttf
-    else:
-        MAIN_FONT = "Helvetica"
-        BOLD_FONT = "Helvetica-Bold"
+    if os.path.exists(BOLD_FONT_FILE):
+        pdfmetrics.registerFont(TTFont('TurkishFont-Bold', BOLD_FONT_FILE))
+        BOLD_FONT = "TurkishFont-Bold"
+    print(f"Fonts registered successfully.")
 except Exception as e:
     print(f"Font registration error: {e}")
-    MAIN_FONT = "Helvetica"
-    BOLD_FONT = "Helvetica-Bold"
 
 # Set appearance mode and color theme
 ctk.set_appearance_mode("System")
