@@ -575,17 +575,106 @@ elif choice == "Müşteri Listesi":
 elif choice == "Yeni Satılık Konut":
     st.header("🏠 Yeni Satılık Konut")
     with st.form("sk_form"):
-        ilan_no = st.text_input("İlan No")
+        c_top1, c_top2 = st.columns(2)
+        with c_top1:
+            fiyat = st.text_input("Fiyat (TL)")
+        with c_top2:
+            ilan_no = st.text_input("İlan No")
+
+        c_loc1, c_loc2, c_loc3 = st.columns(3)
+        with c_loc1:
+            il = st.text_input("İl")
+        with c_loc2:
+            ilce = st.text_input("İlçe")
+        with c_loc3:
+            mahalle = st.text_input("Mahalle")
+
+        ilan_tarihi = st.date_input("İlan Tarihi", value=datetime.now().date())
+
+        emlak_tipi = st.selectbox("Emlak Tipi", ["Satılık Daire", "Satılık Villa", "Satılık Rezidans"])
         tip = st.selectbox("Konut Tipi", ["Daire", "Villa", "Rezidans"])
-        fiyat = st.text_input("Fiyat")
-        bolge = st.text_input("Bölge/Mahalle")
-        oda = st.selectbox("Oda Sayısı", ["1+1", "2+1", "3+1", "4+1", "5+1"])
-        kat = st.text_input("Kat")
-        sahibi = st.text_input("Mülk Sahibi"); sahibi_tel = st.text_input("Sahibi Tel")
-        notlar = st.text_area("Notlar")
+
+        c_m2_1, c_m2_2 = st.columns(2)
+        with c_m2_1:
+            m2_brut = st.text_input("m² (Brüt)")
+        with c_m2_2:
+            m2_net = st.text_input("m² (Net)")
+
+        c_room1, c_room2 = st.columns(2)
+        with c_room1:
+            oda = st.selectbox("Oda Sayısı", ["1+1", "2+1", "3+1", "4+1", "5+1"])
+        with c_room2:
+            bina_yasi = st.text_input("Bina Yaşı")
+
+        c_kat1, c_kat2 = st.columns(2)
+        with c_kat1:
+            bulundugu_kat = st.text_input("Bulunduğu Kat")
+        with c_kat2:
+            kat_sayisi = st.text_input("Kat Sayısı")
+
+        c_opt1, c_opt2 = st.columns(2)
+        with c_opt1:
+            isitma = st.selectbox("Isıtma", ["Merkezi (Pay Ölçer)", "Kombi (Doğalgaz)", "Soba", "Yerden Isıtma", "Klima", "Belirtilmemiş"])
+            banyo_sayisi = st.selectbox("Banyo Sayısı", ["1", "2", "3", "4+", "Belirtilmemiş"])
+            mutfak = st.selectbox("Mutfak", ["Kapalı", "Açık", "Belirtilmemiş"])
+            balkon = st.selectbox("Balkon", ["Var", "Yok", "Belirtilmemiş"])
+        with c_opt2:
+            otopark = st.selectbox("Otopark", ["Açık Otopark", "Kapalı Otopark", "Yok", "Belirtilmemiş"])
+            kullanim_durumu = st.selectbox("Kullanım Durumu", ["Boş", "Kiracılı", "Mal Sahibi", "Belirtilmemiş"])
+            site_icerisinde = st.selectbox("Site İçerisinde", ["Evet", "Hayır", "Belirtilmemiş"])
+            krediye_uygun = st.selectbox("Krediye Uygun", ["Evet", "Hayır", "Belirtilmemiş"])
+
+        sahibi = st.text_input("Mülk Sahibi")
+        sahibi_tel = st.text_input("Sahibi Tel")
+        notlar = st.text_area("Notlar / Açıklama")
         imgs = st.file_uploader("Resimler Seç (Kamera/Galeri)", type=["jpg", "png", "jpeg"], accept_multiple_files=True)
         if st.form_submit_button("İlanı Kaydet"):
-            data = {"tarih": datetime.now().strftime("%d.%m.%Y"), "ilan_no": ilan_no, "konut_tipi": tip, "fiyat": fiyat, "bölge_mahalle": bolge, "oda_sayısı": oda, "kat": kat, "sahibi": sahibi, "sahibi_tel": sahibi_tel, "notlar": notlar}
+            bolge_parts = [p.strip() for p in [il, ilce, mahalle] if p and str(p).strip()]
+            bolge = " / ".join(bolge_parts)
+
+            detaylar = []
+            def add_detay(label, value):
+                if value is None:
+                    return
+                s = str(value).strip()
+                if not s or s == "Belirtilmemiş":
+                    return
+                detaylar.append(f"{label}: {s}")
+
+            add_detay("İlan Tarihi", ilan_tarihi.strftime("%d.%m.%Y") if ilan_tarihi else "")
+            add_detay("Emlak Tipi", emlak_tipi)
+            add_detay("m² (Brüt)", m2_brut)
+            add_detay("m² (Net)", m2_net)
+            add_detay("Bina Yaşı", bina_yasi)
+            add_detay("Bulunduğu Kat", bulundugu_kat)
+            add_detay("Kat Sayısı", kat_sayisi)
+            add_detay("Isıtma", isitma)
+            add_detay("Banyo Sayısı", banyo_sayisi)
+            add_detay("Mutfak", mutfak)
+            add_detay("Balkon", balkon)
+            add_detay("Otopark", otopark)
+            add_detay("Kullanım Durumu", kullanim_durumu)
+            add_detay("Site İçerisinde", site_icerisinde)
+            add_detay("Krediye Uygun", krediye_uygun)
+
+            notlar_full = (notlar or "").strip()
+            if detaylar:
+                if notlar_full:
+                    notlar_full += "\n\n"
+                notlar_full += "--- Detaylar ---\n" + "\n".join(detaylar)
+
+            data = {
+                "tarih": ilan_tarihi.strftime("%d.%m.%Y") if ilan_tarihi else datetime.now().strftime("%d.%m.%Y"),
+                "ilan_no": ilan_no,
+                "konut_tipi": tip,
+                "fiyat": fiyat,
+                "bölge_mahalle": bolge,
+                "oda_sayısı": oda,
+                "kat": bulundugu_kat,
+                "sahibi": sahibi,
+                "sahibi_tel": sahibi_tel,
+                "notlar": notlar_full
+            }
             write_to_cloud("satilik_konut", data, imgs)
 
 elif choice == "Yeni Kiralık Konut":
