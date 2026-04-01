@@ -11,7 +11,7 @@ from reportlab.pdfgen import canvas
 from reportlab.lib.units import inch
 from reportlab.pdfbase import pdfmetrics
 from reportlab.pdfbase.ttfonts import TTFont
-from PIL import Image
+from PIL import Image, ImageOps
 
 # Register fonts that support Turkish characters
 REG_FONT = os.path.join(os.getcwd(), "TurkishFont.ttf")
@@ -389,7 +389,7 @@ class EmlakCRMApp(ctk.CTk):
         logo_added = False
         if self.config.get("logo_path") and os.path.exists(self.config["logo_path"]):
             try:
-                logo = Image.open(self.config["logo_path"])
+                logo = ImageOps.exif_transpose(Image.open(self.config["logo_path"]))
                 lw, lh = logo.size
                 laspect = lh / float(lw)
                 ldisplay_w = 1.4*inch
@@ -423,7 +423,7 @@ class EmlakCRMApp(ctk.CTk):
             try:
                 response = requests.get(img_urls[0], timeout=10)
                 img_data = BytesIO(response.content)
-                img = Image.open(img_data)
+                img = ImageOps.exif_transpose(Image.open(img_data))
                 iw, ih = img.size
                 aspect = ih / float(iw)
                 display_w = 6*inch
@@ -498,7 +498,7 @@ class EmlakCRMApp(ctk.CTk):
                     try:
                         response = requests.get(remaining[idx], timeout=10)
                         img_data = BytesIO(response.content)
-                        img = Image.open(img_data).convert("RGB")
+                        img = ImageOps.exif_transpose(Image.open(img_data)).convert("RGB")
                         x0, y0 = positions[pos_i]
                         c.setStrokeColorRGB(0.8, 0.8, 0.8)
                         c.rect(x0 - 2, y0 - 2, cell_w + 4, cell_h + 4, stroke=1)

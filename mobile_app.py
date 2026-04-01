@@ -11,7 +11,7 @@ from reportlab.pdfgen import canvas
 from reportlab.lib.units import inch
 from reportlab.pdfbase import pdfmetrics
 from reportlab.pdfbase.ttfonts import TTFont
-from PIL import Image as PILImage
+from PIL import Image as PILImage, ImageOps
 
 # --- SAYFA YAPILANDIRMASI (EN BAŞTA OLMALI) ---
 st.set_page_config(page_title="Mobil CRM Portal", page_icon="🏠", layout="wide")
@@ -195,7 +195,7 @@ def generate_pdf_bytes(row):
             try:
                 resp = requests.get(logo_url, timeout=10)
                 logo_data = io.BytesIO(resp.content)
-                logo = PILImage.open(logo_data)
+                logo = ImageOps.exif_transpose(PILImage.open(logo_data))
                 lw, lh = logo.size
                 laspect = lh / float(lw)
                 ldisplay_w = 1.4*inch
@@ -244,7 +244,9 @@ def generate_pdf_bytes(row):
                 resp = requests.get(url, timeout=15)
                 if resp.status_code != 200:
                     return None
-                return PILImage.open(io.BytesIO(resp.content))
+                img = PILImage.open(io.BytesIO(resp.content))
+                img = ImageOps.exif_transpose(img)
+                return img
             except:
                 return None
 
