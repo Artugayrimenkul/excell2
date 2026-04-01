@@ -22,19 +22,23 @@ BOLD_FONT_FILE = "TurkishFont-Bold.ttf"
 MAIN_FONT = "Helvetica"
 BOLD_FONT = "Helvetica-Bold"
 
-if os.path.exists(REG_FONT):
+def check_ttf(path):
+    if not os.path.exists(path): return False
+    with open(path, 'rb') as f:
+        header = f.read(4)
+        return header == b'\x00\x01\x00\x00' or header == b'OTTO'
+
+if check_ttf(REG_FONT):
     try:
         pdfmetrics.registerFont(TTFont('TurkishFont', REG_FONT))
         MAIN_FONT = "TurkishFont"
-    except Exception as e:
-        st.error(f"Regular font hatası: {e}")
+    except: pass
 
-if os.path.exists(BOLD_FONT_FILE):
+if check_ttf(BOLD_FONT_FILE):
     try:
         pdfmetrics.registerFont(TTFont('TurkishFont-Bold', BOLD_FONT_FILE))
         BOLD_FONT = "TurkishFont-Bold"
-    except Exception as e:
-        st.error(f"Bold font hatası: {e}")
+    except: pass
 
 # Ayarları yükle
 def load_settings():
@@ -299,7 +303,7 @@ elif choice == "Müşteri Listesi":
     else: st.info("Müşteri kaydı bulunamadı.")
 
 elif choice == "Yeni Satılık Konut":
-    st.header("� Yeni Satılık Konut")
+    st.header("🏠 Yeni Satılık Konut")
     with st.form("sk_form"):
         ilan_no = st.text_input("İlan No")
         tip = st.selectbox("Konut Tipi", ["Daire", "Villa", "Rezidans"])
@@ -309,10 +313,41 @@ elif choice == "Yeni Satılık Konut":
         kat = st.text_input("Kat")
         sahibi = st.text_input("Mülk Sahibi"); sahibi_tel = st.text_input("Sahibi Tel")
         notlar = st.text_area("Notlar")
-        img = st.file_uploader("Resim Seç (Kamera/Galeri)", type=["jpg", "png", "jpeg"])
+        imgs = st.file_uploader("Resimler Seç (Kamera/Galeri)", type=["jpg", "png", "jpeg"], accept_multiple_files=True)
         if st.form_submit_button("İlanı Kaydet"):
             data = {"tarih": datetime.now().strftime("%d.%m.%Y"), "ilan_no": ilan_no, "konut_tipi": tip, "fiyat": fiyat, "bölge_mahalle": bolge, "oda_sayısı": oda, "kat": kat, "sahibi": sahibi, "sahibi_tel": sahibi_tel, "notlar": notlar}
-            write_to_cloud("satilik_konut", data, img)
+            write_to_cloud("satilik_konut", data, imgs)
+
+elif choice == "Yeni Kiralık Konut":
+    st.header("🏠 Yeni Kiralık Konut")
+    with st.form("kk_form"):
+        ilan_no = st.text_input("İlan No")
+        tip = st.selectbox("Konut Tipi", ["Daire", "Villa", "Rezidans"])
+        kira = st.text_input("Kira Bedeli")
+        bolge = st.text_input("Bölge/Mahalle")
+        oda = st.selectbox("Oda Sayısı", ["1+1", "2+1", "3+1", "4+1", "5+1"])
+        kat = st.text_input("Kat")
+        sahibi = st.text_input("Mülk Sahibi"); sahibi_tel = st.text_input("Sahibi Tel")
+        notlar = st.text_area("Notlar")
+        imgs = st.file_uploader("Resimler Seç", type=["jpg", "png", "jpeg"], accept_multiple_files=True)
+        if st.form_submit_button("Kiralık İlanı Kaydet"):
+            data = {"tarih": datetime.now().strftime("%d.%m.%Y"), "ilan_no": ilan_no, "konut_tipi": tip, "kira_bedeli": kira, "bölge_mahalle": bolge, "oda_sayısı": oda, "kat": kat, "sahibi": sahibi, "sahibi_tel": sahibi_tel, "notlar": notlar}
+            write_to_cloud("kiralik_konut", data, imgs)
+
+elif choice == "Yeni Satılık Arsa":
+    st.header("🌳 Yeni Satılık Arsa")
+    with st.form("sa_form"):
+        ilan_no = st.text_input("İlan No")
+        tip = st.selectbox("Arsa Tipi", ["İmarlı", "Tarla", "Zeytinlik"])
+        ada = st.text_input("Ada"); parsel = st.text_input("Parsel")
+        fiyat = st.text_input("Fiyat")
+        bolge = st.text_input("Bölge/Mahalle")
+        sahibi = st.text_input("Mülk Sahibi"); sahibi_tel = st.text_input("Sahibi Tel")
+        notlar = st.text_area("Notlar")
+        imgs = st.file_uploader("Resimler Seç", type=["jpg", "png", "jpeg"], accept_multiple_files=True)
+        if st.form_submit_button("Arsa İlanını Kaydet"):
+            data = {"tarih": datetime.now().strftime("%d.%m.%Y"), "ilan_no": ilan_no, "arsa_tipi": tip, "ada": ada, "parsel": parsel, "fiyat": fiyat, "bölge_mahalle": bolge, "sahibi": sahibi, "sahibi_tel": sahibi_tel, "notlar": notlar}
+            write_to_cloud("satilik_arsa", data, imgs)
 
 elif choice == "Portföy Listesi":
     st.header("📋 Güncel Portföyler")
@@ -405,9 +440,10 @@ elif choice == "Akıllı Eşleştirme":
                         with st.container(border=True):
                             c1, c2 = st.columns([1, 3])
                             with c1:
-                                url = get_image_url(p.get('resim_url'))
-                                if url: st.image(url, width=100)
+                                urls = get_image_urls(p.get('image_urls'))
+                                if urls: st.image(get_full_image_url(urls[0]), width=100)
+                                elif p.get('resim_url'): st.image(get_full_image_url(p['resim_url']), width=100)
                             with c2:
-                                st.write(f"**İlan: {p['ilan_no']}** | {p['bölge_mahalle']} | {p.get('fiyat')} TL")
-                                st.link_button("Müşteriye Gönder", f"https://wa.me/{cust['telefon']}?text=Sizin için uygun ilan: {p['ilan_no']}\nBölge: {p['bölge_mahalle']}\nFiyat: {p.get('fiyat')} TL")
+                                st.write(f"**İlan: {p['ilan_no']}** | {p['bölge_mahalle']} | {p.get('fiyat', p.get('kira_bedeli', ''))} TL")
+                                st.link_button("Müşteriye Gönder", f"https://wa.me/{cust['telefon']}?text=Sizin için uygun ilan: {p['ilan_no']}\nBölge: {p['bölge_mahalle']}\nFiyat: {p.get('fiyat', p.get('kira_bedeli', ''))} TL")
     else: st.warning("Müşteri bulunamadı.")

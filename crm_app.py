@@ -19,14 +19,22 @@ BOLD_FONT_FILE = os.path.join(os.getcwd(), "TurkishFont-Bold.ttf")
 MAIN_FONT = "Helvetica"
 BOLD_FONT = "Helvetica-Bold"
 
+def check_ttf(path):
+    if not os.path.exists(path): return False
+    try:
+        with open(path, 'rb') as f:
+            header = f.read(4)
+            return header == b'\x00\x01\x00\x00' or header == b'OTTO'
+    except: return False
+
 try:
-    if os.path.exists(REG_FONT):
+    if check_ttf(REG_FONT):
         pdfmetrics.registerFont(TTFont('TurkishFont', REG_FONT))
         MAIN_FONT = "TurkishFont"
-    if os.path.exists(BOLD_FONT_FILE):
+    if check_ttf(BOLD_FONT_FILE):
         pdfmetrics.registerFont(TTFont('TurkishFont-Bold', BOLD_FONT_FILE))
         BOLD_FONT = "TurkishFont-Bold"
-    print(f"Fonts registered successfully.")
+    print(f"Fonts checked and registered if valid.")
 except Exception as e:
     print(f"Font registration error: {e}")
 
