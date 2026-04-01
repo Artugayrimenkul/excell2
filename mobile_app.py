@@ -106,6 +106,8 @@ def load_pdf_settings():
     settings["title_1"] = config.get("company_name", "")
     settings["footer_text"] = f"İletişim: {config.get('company_phone', '')}  |  {config.get('company_email', '')}"
 
+    storage_path = "assets/pdf_settings.json"
+
     try:
         res = supabase.table("app_settings").select("value").eq("key", "pdf").execute()
         if res.data and isinstance(res.data, list) and len(res.data) > 0:
@@ -117,17 +119,38 @@ def load_pdf_settings():
                     value = {}
             if isinstance(value, dict):
                 settings.update(value)
+            return settings
     except:
-        pass
+        try:
+            raw = supabase.storage.from_("portfolio_images").download(storage_path)
+            if raw:
+                if isinstance(raw, bytes):
+                    value = json.loads(raw.decode("utf-8"))
+                else:
+                    value = json.loads(raw)
+                if isinstance(value, dict):
+                    settings.update(value)
+        except:
+            pass
 
     return settings
 
 def save_pdf_settings(settings: dict):
+    storage_path = "assets/pdf_settings.json"
     try:
         supabase.table("app_settings").upsert({"key": "pdf", "value": settings}).execute()
         return True
     except:
-        return False
+        try:
+            payload = json.dumps(settings, ensure_ascii=False).encode("utf-8")
+            supabase.storage.from_("portfolio_images").upload(
+                storage_path,
+                payload,
+                {"content-type": "application/json", "upsert": "true"}
+            )
+            return True
+        except:
+            return False
 
 def upload_pdf_logo(file):
     if not file:
