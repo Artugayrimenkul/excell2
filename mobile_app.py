@@ -241,7 +241,7 @@ def generate_pdf_bytes(row):
                     display_h = 4.5*inch
                     x_img = (width - display_w) / 2
                     y_img = y - display_h
-                c.setStrokeColorRGB(0.8, 0.8, 0.8)
+                    c.setStrokeColorRGB(0.8, 0.8, 0.8)
                     c.rect(x_img - 2, y_img - 2, display_w + 4, display_h + 4, stroke=1)
                     draw_image_fit(img, x_img, y_img, display_w, display_h)
                     y -= (display_h + 0.6*inch)
