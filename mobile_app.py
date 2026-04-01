@@ -470,9 +470,39 @@ def upload_images(files, ilan_no):
     urls = []
     for i, file in enumerate(files):
         try:
-            file_ext = file.name.split(".")[-1]
+            def optimize_image_bytes(raw: bytes):
+                try:
+                    img = PILImage.open(io.BytesIO(raw))
+                    img = ImageOps.exif_transpose(img)
+                    if img.mode not in ("RGB", "L"):
+                        img = img.convert("RGB")
+                    max_side = 1920
+                    w, h = img.size
+                    if max(w, h) > max_side:
+                        if w >= h:
+                            new_w = max_side
+                            new_h = int(h * (max_side / float(w)))
+                        else:
+                            new_h = max_side
+                            new_w = int(w * (max_side / float(h)))
+                        img = img.resize((max(1, new_w), max(1, new_h)), PILImage.LANCZOS)
+
+                    out = io.BytesIO()
+                    img.save(out, format="JPEG", quality=88, optimize=True, progressive=True)
+                    optimized = out.getvalue()
+                    if len(optimized) >= len(raw) or len(raw) < 500_000:
+                        return raw, None
+                    return optimized, "jpg"
+                except:
+                    return raw, None
+
+            raw = file.getvalue()
+            optimized, forced_ext = optimize_image_bytes(raw)
+
+            file_ext = forced_ext or file.name.split(".")[-1].lower()
             file_name = f"{ilan_no}_{int(datetime.now().timestamp())}_{i}.{file_ext}"
-            supabase.storage.from_("portfolio_images").upload(file_name, file.getvalue(), {"content-type": f"image/{file_ext}", "upsert": "true"})
+            content_type = "image/jpeg" if file_ext == "jpg" else f"image/{file_ext}"
+            supabase.storage.from_("portfolio_images").upload(file_name, optimized, {"content-type": content_type, "upsert": "true"})
             urls.append(file_name)
         except Exception as e:
             st.error(f"Resim yükleme hatası: {e}")
