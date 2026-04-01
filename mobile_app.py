@@ -6,6 +6,7 @@ import os
 from datetime import datetime
 import io
 import requests
+import urllib.parse
 from reportlab.lib.pagesizes import A4
 from reportlab.pdfgen import canvas
 from reportlab.lib.units import inch
@@ -167,6 +168,20 @@ def upload_pdf_logo(file):
         )
         return path
     except:
+        return ""
+
+def upload_pdf_bytes_to_storage(pdf_bytes: io.BytesIO, ilan_no: str):
+    try:
+        safe_ilan = str(ilan_no or "ilan").strip().replace("/", "_").replace("\\", "_").replace(" ", "_")
+        file_name = f"assets/pdfs/{safe_ilan}_{int(datetime.now().timestamp())}.pdf"
+        supabase.storage.from_("portfolio_images").upload(
+            file_name,
+            pdf_bytes.getvalue(),
+            {"content-type": "application/pdf", "upsert": "true"}
+        )
+        return get_full_image_url(file_name)
+    except Exception as e:
+        st.error(f"PDF yükleme hatası: {e}")
         return ""
 
 # --- PDF OLUŞTURMA FONKSİYONU ---
@@ -676,5 +691,34 @@ elif choice == "Akıllı Eşleştirme":
                                 elif p.get('resim_url'): st.image(get_full_image_url(p['resim_url']), width=100)
                             with c2:
                                 st.write(f"**İlan: {p['ilan_no']}** | {p['bölge_mahalle']} | {p.get('fiyat', p.get('kira_bedeli', ''))} TL")
-                                st.link_button("Müşteriye Gönder", f"https://wa.me/{cust['telefon']}?text=Sizin için uygun ilan: {p['ilan_no']}\nBölge: {p['bölge_mahalle']}\nFiyat: {p.get('fiyat', p.get('kira_bedeli', ''))} TL")
+                                match_key = f"match_pdf_url_{table}_{p.get('id', p.get('ilan_no', 'x'))}"
+                                if match_key not in st.session_state:
+                                    st.session_state[match_key] = ""
+
+                                btn1, btn2 = st.columns(2)
+                                with btn1:
+                                    if st.button("📎 PDF Linki Oluştur", key=f"mk_{match_key}", use_container_width=True):
+                                        pdf_bytes = generate_pdf_bytes(p)
+                                        pdf_url = upload_pdf_bytes_to_storage(pdf_bytes, p.get("ilan_no"))
+                                        if pdf_url:
+                                            st.session_state[match_key] = pdf_url
+                                            st.success("PDF linki hazır.")
+
+                                with btn2:
+                                    pdf_url = st.session_state.get(match_key, "")
+                                    if pdf_url:
+                                        msg = (
+                                            f"Sizin için uygun ilan PDF\\n"
+                                            f"İlan No: {p.get('ilan_no','')}\\n"
+                                            f"Bölge: {p.get('bölge_mahalle','')}\\n"
+                                            f"Fiyat: {p.get('fiyat', p.get('kira_bedeli',''))} TL\\n"
+                                            f"PDF: {pdf_url}"
+                                        )
+                                        st.link_button(
+                                            "📤 WhatsApp PDF Gönder",
+                                            f"https://wa.me/{cust['telefon']}?text={urllib.parse.quote(msg)}",
+                                            use_container_width=True
+                                        )
+                                    else:
+                                        st.caption("Önce PDF linki oluşturun.")
     else: st.warning("Müşteri bulunamadı.")
