@@ -13,14 +13,21 @@ from reportlab.pdfbase import pdfmetrics
 from reportlab.pdfbase.ttfonts import TTFont
 from PIL import Image
 
-# Register a font that supports Turkish characters (Standard fonts usually don't)
-# We will use Helvetica as fallback but attempt to use DejaVuSans if possible
+# Register a font that supports Turkish characters
+FONT_PATH = "TurkishFont.ttf"
 try:
-    # If user has a specific font, we can use it, otherwise we'll try to find a common system font
-    # or stick to standard but with proper encoding
-    pass
-except:
-    pass
+    if os.path.exists(FONT_PATH):
+        pdfmetrics.registerFont(TTFont('TurkishFont', FONT_PATH))
+        pdfmetrics.registerFont(TTFont('TurkishFont-Bold', FONT_PATH)) # Use same for bold if needed or separate
+        MAIN_FONT = "TurkishFont"
+        BOLD_FONT = "TurkishFont" # In a real case we'd use a bold .ttf
+    else:
+        MAIN_FONT = "Helvetica"
+        BOLD_FONT = "Helvetica-Bold"
+except Exception as e:
+    print(f"Font registration error: {e}")
+    MAIN_FONT = "Helvetica"
+    BOLD_FONT = "Helvetica-Bold"
 
 # Set appearance mode and color theme
 ctk.set_appearance_mode("System")
@@ -360,22 +367,14 @@ class EmlakCRMApp(ctk.CTk):
         import requests
         from io import BytesIO
         
-        # --- Turkish Character Map (Fallback) ---
-        def fix_tr(text):
-            if not text: return ""
-            # ReportLab standard fonts (Helvetica, Times, etc.) support some Latin-1 characters
-            # but usually fail with Turkish specific ones like Ş, ş, Ğ, ğ, İ, ı
-            # We use a simple replacement for better visibility if custom font is not loaded
-            return str(text)
-
         # Professional PDF logic using cloud data
         filename = f"Katalog_{row.get('ilan_no', 'Yeni')}.pdf"
         c = canvas.Canvas(filename, pagesize=A4)
         width, height = A4
         
         # --- Header ---
-        c.setFillColorRGB(0.2, 0.4, 0.6)
-        c.rect(0, height-1.5*inch, width, 1.5*inch, fill=1)
+        c.setFillColorRGB(0.1, 0.2, 0.4) # Darker professional blue
+        c.rect(0, height-1.8*inch, width, 1.8*inch, fill=1)
         
         # Logo Check
         logo_added = False
@@ -384,85 +383,92 @@ class EmlakCRMApp(ctk.CTk):
                 logo = Image.open(self.config["logo_path"])
                 lw, lh = logo.size
                 laspect = lh / float(lw)
-                ldisplay_w = 1.2*inch
+                ldisplay_w = 1.4*inch
                 ldisplay_h = ldisplay_w * laspect
-                c.drawInlineImage(logo, 0.5*inch, height-1.3*inch, width=ldisplay_w, height=ldisplay_h)
+                c.drawInlineImage(logo, 0.5*inch, height-1.5*inch, width=ldisplay_w, height=ldisplay_h)
                 logo_added = True
             except: pass
 
         c.setFillColorRGB(1, 1, 1)
-        c.setFont("Helvetica-Bold", 20)
-        title_x = 2*inch if logo_added else width/2
-        title_anchor = "left" if logo_added else "middle"
+        c.setFont(BOLD_FONT, 22)
+        title_x = 2.2*inch if logo_added else width/2
+        title_text = f"{self.config['company_name']}\nPORTFÖY TANITIMI"
         
-        title_text = f"{self.config['company_name']} PORTFÖY TANITIMI"
         if logo_added:
-            c.drawString(title_x, height-0.8*inch, fix_tr(title_text))
+            c.drawString(title_x, height-0.8*inch, self.config['company_name'].upper())
+            c.setFont(MAIN_FONT, 16)
+            c.drawString(title_x, height-1.1*inch, "GAYRİMENKUL KATALOĞU")
         else:
-            c.drawCentredString(width/2, height-0.8*inch, fix_tr(title_text))
+            c.drawCentredString(width/2, height-0.8*inch, self.config['company_name'].upper())
+            c.setFont(MAIN_FONT, 16)
+            c.drawCentredString(width/2, height-1.1*inch, "GAYRİMENKUL KATALOĞU")
         
-        y = height - 2*inch
+        y = height - 2.2*inch
         
         # --- Images Section ---
         img_urls = self.get_image_urls(row.get('image_urls'))
-        # Legacy support
         if not img_urls and row.get('resim_url'):
             img_urls = [f"{self.config['supabase_url']}/storage/v1/object/public/portfolio_images/{row['resim_url']}"]
             
         if img_urls:
             try:
-                # Main image (First one)
-                response = requests.get(img_urls[0])
+                response = requests.get(img_urls[0], timeout=10)
                 img_data = BytesIO(response.content)
                 img = Image.open(img_data)
-                
-                # Aspect ratio calculation
                 iw, ih = img.size
                 aspect = ih / float(iw)
-                display_w = 5*inch
+                display_w = 6*inch
                 display_h = display_w * aspect
-                
-                # Limit height
-                if display_h > 4*inch:
-                    display_h = 4*inch
+                if display_h > 4.5*inch:
+                    display_h = 4.5*inch
                     display_w = display_h / aspect
                 
+                # Shadow/Border for image
+                c.setStrokeColorRGB(0.8, 0.8, 0.8)
+                c.rect((width-display_w)/2 - 2, y-display_h - 2, display_w + 4, display_h + 4, stroke=1)
                 c.drawInlineImage(img, (width-display_w)/2, y-display_h, width=display_w, height=display_h)
-                y -= (display_h + 0.5*inch)
+                y -= (display_h + 0.6*inch)
             except Exception as e:
-                print(f"PDF image error: {e}")
                 y -= 0.5*inch
         
         # --- Details Section ---
         c.setFillColorRGB(0, 0, 0)
-        c.setFont("Helvetica-Bold", 16)
-        c.drawString(1*inch, y, fix_tr("GAYRİMENKUL DETAYLARI"))
-        y -= 0.3*inch
-        c.line(1*inch, y, width-1*inch, y)
+        c.setFont(BOLD_FONT, 18)
+        c.drawString(0.8*inch, y, "GAYRİMENKUL BİLGİLERİ")
+        y -= 0.2*inch
+        c.setStrokeColorRGB(0.1, 0.2, 0.4)
+        c.setLineWidth(2)
+        c.line(0.8*inch, y, width-0.8*inch, y)
         y -= 0.4*inch
         
         excluded_keys = ['id', 'tarih', 'resim_klasoru', 'image_urls', 'resim_url', 'sahibi', 'sahibi_tel']
         
+        # Two column details for better look
+        c.setFont(MAIN_FONT, 12)
         for k, v in row.items():
             if v and k not in excluded_keys:
                 label = k.replace("_", " ").title()
-                c.setFont("Helvetica-Bold", 11)
-                c.drawString(1*inch, y, f"{fix_tr(label)}:")
-                c.setFont("Helvetica", 11)
-                c.drawString(3*inch, y, fix_tr(str(v)))
-                y -= 0.25*inch
+                c.setFont(BOLD_FONT, 11)
+                c.setFillColorRGB(0.2, 0.2, 0.2)
+                c.drawString(1*inch, y, f"{label}:")
+                c.setFont(MAIN_FONT, 11)
+                c.setFillColorRGB(0, 0, 0)
+                c.drawString(3*inch, y, str(v))
+                y -= 0.3*inch
                 
-                if y < 1.5*inch: # New page if needed
+                if y < 1.5*inch:
                     c.showPage()
                     y = height - 1*inch
         
         # --- Footer ---
-        c.setFillColorRGB(0.2, 0.4, 0.6)
-        c.rect(0, 0, width, 0.8*inch, fill=1)
+        c.setFillColorRGB(0.1, 0.2, 0.4)
+        c.rect(0, 0, width, 1*inch, fill=1)
         c.setFillColorRGB(1, 1, 1)
-        c.setFont("Helvetica-Bold", 10)
-        footer_text = f"İletişim: {self.config['company_phone']} | {self.config['company_email']}"
-        c.drawCentredString(width/2, 0.4*inch, fix_tr(footer_text))
+        c.setFont(BOLD_FONT, 10)
+        footer_text = f"İletişim: {self.config['company_phone']}  |  {self.config['company_email']}"
+        c.drawCentredString(width/2, 0.6*inch, footer_text)
+        c.setFont(MAIN_FONT, 8)
+        c.drawCentredString(width/2, 0.4*inch, "Bu belge otomatik olarak Artu Gayrimenkul CRM tarafından oluşturulmuştur.")
         
         c.save()
         try:
