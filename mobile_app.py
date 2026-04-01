@@ -13,6 +13,9 @@ from reportlab.pdfbase import pdfmetrics
 from reportlab.pdfbase.ttfonts import TTFont
 from PIL import Image as PILImage
 
+# --- SAYFA YAPILANDIRMASI (EN BAŞTA OLMALI) ---
+st.set_page_config(page_title="Mobil CRM Portal", page_icon="🏠", layout="wide")
+
 # Register fonts that support Turkish characters
 REG_FONT = "TurkishFont.ttf"
 BOLD_FONT_FILE = "TurkishFont-Bold.ttf"
@@ -32,9 +35,6 @@ if os.path.exists(BOLD_FONT_FILE):
         BOLD_FONT = "TurkishFont-Bold"
     except Exception as e:
         st.error(f"Bold font hatası: {e}")
-
-# --- SAYFA YAPILANDIRMASI (EN BAŞTA OLMALI) ---
-st.set_page_config(page_title="Mobil CRM Portal", page_icon="🏠", layout="wide")
 
 # Ayarları yükle
 def load_settings():
