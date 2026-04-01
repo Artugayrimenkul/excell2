@@ -468,6 +468,54 @@ class EmlakCRMApp(ctk.CTk):
                 if y < 1.5*inch:
                     c.showPage()
                     y = height - 1*inch
+
+        if img_urls and len(img_urls) > 1:
+            remaining = img_urls[1:]
+            idx = 0
+            while idx < len(remaining):
+                c.showPage()
+                c.setFillColorRGB(0.1, 0.2, 0.4)
+                c.rect(0, height-1.2*inch, width, 1.2*inch, fill=1)
+                c.setFillColorRGB(1, 1, 1)
+                c.setFont(BOLD_FONT, 16)
+                c.drawString(0.8*inch, height-0.8*inch, f"{self.config['company_name'].upper()} - FOTOĞRAFLAR")
+
+                margin_x = 0.8*inch
+                margin_y = 1.2*inch
+                gap = 0.3*inch
+                cell_w = (width - 2*margin_x - gap) / 2
+                cell_h = (height - 1.6*inch - margin_y - gap) / 2
+                positions = [
+                    (margin_x, margin_y + cell_h + gap),
+                    (margin_x + cell_w + gap, margin_y + cell_h + gap),
+                    (margin_x, margin_y),
+                    (margin_x + cell_w + gap, margin_y),
+                ]
+
+                for pos_i in range(4):
+                    if idx >= len(remaining):
+                        break
+                    try:
+                        response = requests.get(remaining[idx], timeout=10)
+                        img_data = BytesIO(response.content)
+                        img = Image.open(img_data).convert("RGB")
+                        x0, y0 = positions[pos_i]
+                        c.setStrokeColorRGB(0.8, 0.8, 0.8)
+                        c.rect(x0 - 2, y0 - 2, cell_w + 4, cell_h + 4, stroke=1)
+
+                        iw, ih = img.size
+                        aspect = ih / float(iw) if iw else 1
+                        draw_w = cell_w
+                        draw_h = draw_w * aspect
+                        if draw_h > cell_h:
+                            draw_h = cell_h
+                            draw_w = draw_h / aspect if aspect else cell_w
+                        x_img = x0 + (cell_w - draw_w) / 2
+                        y_img = y0 + (cell_h - draw_h) / 2
+                        c.drawInlineImage(img, x_img, y_img, width=draw_w, height=draw_h)
+                    except:
+                        pass
+                    idx += 1
         
         # --- Footer ---
         c.setFillColorRGB(0.1, 0.2, 0.4)
