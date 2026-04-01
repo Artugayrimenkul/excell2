@@ -12,6 +12,10 @@ from reportlab.pdfgen import canvas
 from reportlab.lib.units import inch
 from reportlab.pdfbase import pdfmetrics
 from reportlab.pdfbase.ttfonts import TTFont
+from reportlab.platypus import Paragraph, Frame
+from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+from reportlab.lib.enums import TA_LEFT
+from reportlab.lib.utils import simpleSplit
 from PIL import Image as PILImage, ImageOps
 
 # --- SAYFA YAPILANDIRMASI (EN BAŞTA OLMALI) ---
@@ -300,19 +304,74 @@ def generate_pdf_bytes(row):
         y -= 0.4*inch
         
         excluded = ['id', 'tarih', 'resim_klasoru', 'image_urls', 'resim_url', 'sahibi', 'sahibi_tel']
+
+        styles = getSampleStyleSheet()
+        base_style = styles["Normal"]
+        base_style.fontName = MAIN_FONT
+        base_style.fontSize = 10.5
+        base_style.leading = 13
+
+        label_style = ParagraphStyle(
+            "LabelStyle",
+            parent=base_style,
+            fontName=BOLD_FONT,
+            fontSize=10.5,
+            leading=13,
+            alignment=TA_LEFT,
+        )
+
+        value_style = ParagraphStyle(
+            "ValueStyle",
+            parent=base_style,
+            fontName=MAIN_FONT,
+            fontSize=10.5,
+            leading=13,
+            alignment=TA_LEFT,
+        )
+
+        left_x = 0.9 * inch
+        label_w = 2.0 * inch
+        gap_w = 0.2 * inch
+        value_x = left_x + label_w + gap_w
+        value_w = width - value_x - 0.9 * inch
+        line_bottom_margin = 1.5 * inch
+
+        def ensure_space(needed_h):
+            nonlocal y
+            if y - needed_h < line_bottom_margin:
+                c.showPage()
+                # Simple page header for continued details
+                c.setFillColorRGB(*primary_rgb)
+                c.rect(0, height-1.0*inch, width, 1.0*inch, fill=1)
+                c.setFillColorRGB(1, 1, 1)
+                c.setFont(BOLD_FONT, 14)
+                c.drawString(0.8*inch, height-0.65*inch, f"{title_1} - DETAYLAR")
+                y = height - 1.3 * inch
+
         for k, v in row.items():
-            if v and k not in excluded:
-                label = k.replace("_", " ").title()
-                c.setFont(BOLD_FONT, 11)
-                c.setFillColorRGB(0.2, 0.2, 0.2)
-                c.drawString(1*inch, y, f"{label}:")
-                c.setFont(MAIN_FONT, 11)
-                c.setFillColorRGB(0, 0, 0)
-                c.drawString(3*inch, y, str(v))
-                y -= 0.3*inch
-                if y < 1.5*inch:
-                    c.showPage()
-                    y = height - 1*inch
+            if not v or k in excluded:
+                continue
+
+            label = k.replace("_", " ").title()
+            value = str(v)
+
+            label_lines = simpleSplit(f"{label}:", BOLD_FONT, 10.5, label_w)
+            value_lines = simpleSplit(value, MAIN_FONT, 10.5, value_w)
+            row_lines = max(len(label_lines), len(value_lines), 1)
+            row_h = row_lines * 13
+
+            ensure_space(row_h + 6)
+
+            label_p = Paragraph(f"{label}:", label_style)
+            value_p = Paragraph(value.replace("\n", "<br/>"), value_style)
+
+            label_f = Frame(left_x, y - row_h, label_w, row_h, leftPadding=0, rightPadding=0, topPadding=0, bottomPadding=0, showBoundary=0)
+            value_f = Frame(value_x, y - row_h, value_w, row_h, leftPadding=0, rightPadding=0, topPadding=0, bottomPadding=0, showBoundary=0)
+
+            label_f.addFromList([label_p], c)
+            value_f.addFromList([value_p], c)
+
+            y -= (row_h + 6)
 
         if pdf_settings.get("show_all_images", True) and len(img_urls) > 1:
             remaining = img_urls[1:]
