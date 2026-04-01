@@ -506,9 +506,33 @@ elif choice == "Yeni Müşteri":
 
 elif choice == "Müşteri Listesi":
     st.header("👥 Müşteri Listesi")
+    q = st.text_input("Ara (Ad, Telefon, Bölge, Not)", key="cust_search").strip().lower()
+    demand_filter = st.selectbox("Talep Türü Filtresi", ["Hepsi", "Satılık Konut", "Kiralık Konut", "Satılık Arsa"], key="cust_demand_filter")
+    show_limit = st.slider("Gösterilecek maksimum kayıt", min_value=10, max_value=200, value=50, step=10, key="cust_limit")
+
     res = supabase.table("customers").select("*").execute()
     if res.data:
         df = pd.DataFrame(res.data)
+
+        if demand_filter != "Hepsi" and "talep_türü" in df.columns:
+            df = df[df["talep_türü"] == demand_filter]
+
+        if q:
+            def _safe(v):
+                return "" if v is None else str(v).lower()
+
+            cols = [c for c in ["ad_soyad", "telefon", "e_posta", "bölge_1", "bölge_2", "bölge_3", "notlar"] if c in df.columns]
+            if cols:
+                mask = df[cols].applymap(_safe).agg(" ".join, axis=1).str.contains(q, na=False)
+                df = df[mask]
+
+        if "ad_soyad" in df.columns:
+            df = df.sort_values("ad_soyad")
+
+        df = df.head(int(show_limit))
+
+        st.caption(f"Toplam eşleşen: {len(df)}")
+
         for _, row in df.iterrows():
             with st.expander(f"{row['ad_soyad']} - {row['talep_türü']}"):
                 if st.session_state.get(f"edit_cust_{row['id']}"):
@@ -599,10 +623,61 @@ elif choice == "Portföy Listesi":
     st.header("📋 Güncel Portföyler")
     t1, t2, t3 = st.tabs(["Satılık Konut", "Kiralık Konut", "Satılık Arsa"])
     
-    def show_portfolio(table):
+    def _parse_amount(v):
+        if v is None:
+            return None
+        s = str(v).strip()
+        if not s:
+            return None
+        s = s.replace(".", "").replace(",", "")
+        s = "".join(ch for ch in s if ch.isdigit())
+        if not s:
+            return None
+        try:
+            return int(s)
+        except:
+            return None
+
+    def show_portfolio(table, key_prefix, q, min_amount, max_amount, only_with_images, limit_count):
         res = supabase.table(table).select("*").execute()
         if res.data:
-            for row in res.data:
+            rows = res.data
+
+            if q:
+                ql = q.strip().lower()
+                def _row_text(r):
+                    parts = [
+                        r.get("ilan_no"),
+                        r.get("bölge_mahalle"),
+                        r.get("notlar"),
+                        r.get("konut_tipi"),
+                        r.get("arsa_tipi"),
+                    ]
+                    return " ".join([str(p).lower() for p in parts if p is not None])
+                rows = [r for r in rows if ql in _row_text(r)]
+
+            if only_with_images:
+                rows = [r for r in rows if (get_image_urls(r.get("image_urls")) or r.get("resim_url"))]
+
+            amount_field = "kira_bedeli" if table == "kiralik_konut" else "fiyat"
+            if min_amount is not None or max_amount is not None:
+                filtered = []
+                for r in rows:
+                    val = _parse_amount(r.get(amount_field))
+                    if val is None:
+                        continue
+                    if min_amount is not None and val < min_amount:
+                        continue
+                    if max_amount is not None and val > max_amount:
+                        continue
+                    filtered.append(r)
+                rows = filtered
+
+            rows = rows[: int(limit_count)]
+
+            st.caption(f"Toplam eşleşen: {len(rows)}")
+
+            for row in rows:
                 with st.container(border=True):
                     # --- EDIT MODE ---
                     if st.session_state.get(f"edit_port_{table}_{row['id']}"):
@@ -664,9 +739,47 @@ elif choice == "Portföy Listesi":
                             st.link_button("🔗 WhatsApp'ta Paylaş", f"https://wa.me/?text=İlan No: {row['ilan_no']}\nBölge: {row['bölge_mahalle']}\nFiyat: {row.get('fiyat', row.get('kira_bedeli', ''))} TL", use_container_width=True)
         else: st.info("Kayıt bulunamadı.")
 
-    with t1: show_portfolio("satilik_konut")
-    with t2: show_portfolio("kiralik_konut")
-    with t3: show_portfolio("satilik_arsa")
+    with t1:
+        st.subheader("Filtreler")
+        q1 = st.text_input("Ara (İlan No / Bölge / Not)", key="pf_q_satilik")
+        c1, c2, c3, c4 = st.columns(4)
+        with c1:
+            min1 = st.number_input("Min Fiyat", min_value=0, value=0, step=100000, key="pf_min_satilik")
+        with c2:
+            max1 = st.number_input("Max Fiyat", min_value=0, value=0, step=100000, key="pf_max_satilik")
+        with c3:
+            only_img1 = st.checkbox("Sadece Resimli", value=False, key="pf_img_satilik")
+        with c4:
+            lim1 = st.slider("Limit", min_value=10, max_value=200, value=50, step=10, key="pf_lim_satilik")
+        show_portfolio("satilik_konut", "satilik", q1, min1 if min1 > 0 else None, max1 if max1 > 0 else None, only_img1, lim1)
+
+    with t2:
+        st.subheader("Filtreler")
+        q2 = st.text_input("Ara (İlan No / Bölge / Not)", key="pf_q_kiralik")
+        c1, c2, c3, c4 = st.columns(4)
+        with c1:
+            min2 = st.number_input("Min Kira", min_value=0, value=0, step=1000, key="pf_min_kiralik")
+        with c2:
+            max2 = st.number_input("Max Kira", min_value=0, value=0, step=1000, key="pf_max_kiralik")
+        with c3:
+            only_img2 = st.checkbox("Sadece Resimli", value=False, key="pf_img_kiralik")
+        with c4:
+            lim2 = st.slider("Limit", min_value=10, max_value=200, value=50, step=10, key="pf_lim_kiralik")
+        show_portfolio("kiralik_konut", "kiralik", q2, min2 if min2 > 0 else None, max2 if max2 > 0 else None, only_img2, lim2)
+
+    with t3:
+        st.subheader("Filtreler")
+        q3 = st.text_input("Ara (İlan No / Bölge / Not)", key="pf_q_arsa")
+        c1, c2, c3, c4 = st.columns(4)
+        with c1:
+            min3 = st.number_input("Min Fiyat", min_value=0, value=0, step=100000, key="pf_min_arsa")
+        with c2:
+            max3 = st.number_input("Max Fiyat", min_value=0, value=0, step=100000, key="pf_max_arsa")
+        with c3:
+            only_img3 = st.checkbox("Sadece Resimli", value=False, key="pf_img_arsa")
+        with c4:
+            lim3 = st.slider("Limit", min_value=10, max_value=200, value=50, step=10, key="pf_lim_arsa")
+        show_portfolio("satilik_arsa", "arsa", q3, min3 if min3 > 0 else None, max3 if max3 > 0 else None, only_img3, lim3)
 
 elif choice == "Akıllı Eşleştirme":
     st.header("🎯 Akıllı Eşleştirme")
