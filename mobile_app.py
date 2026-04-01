@@ -7,6 +7,7 @@ from datetime import datetime
 import io
 import requests
 import urllib.parse
+import time
 from reportlab.lib.pagesizes import A4
 from reportlab.pdfgen import canvas
 from reportlab.lib.units import inch
@@ -74,6 +75,24 @@ try:
 except Exception as e:
     st.error(f"Supabase Bağlantı Hatası: {e}")
     st.stop()
+
+def fetch_table_cached(table_name: str, limit: int, order_col: str = "id", desc: bool = True, ttl_seconds: int = 20):
+    cache_key = f"_cache_{table_name}_{limit}_{order_col}_{desc}"
+    now = time.time()
+    cached = st.session_state.get(cache_key)
+    if cached and isinstance(cached, dict) and (now - cached.get("ts", 0)) < ttl_seconds:
+        return cached.get("data", [])
+    try:
+        q = supabase.table(table_name).select("*")
+        if order_col:
+            q = q.order(order_col, desc=desc)
+        if limit:
+            q = q.limit(int(limit))
+        data = q.execute().data or []
+    except Exception:
+        data = []
+    st.session_state[cache_key] = {"ts": now, "data": data}
+    return data
 
 st.title(f"🏠 {config['company_name']}")
 st.subheader("Mobil Yönetim Paneli")
@@ -569,9 +588,10 @@ elif choice == "Müşteri Listesi":
     demand_filter = st.selectbox("Talep Türü Filtresi", ["Hepsi", "Satılık Konut", "Kiralık Konut", "Satılık Arsa"], key="cust_demand_filter")
     show_limit = st.slider("Gösterilecek maksimum kayıt", min_value=10, max_value=200, value=50, step=10, key="cust_limit")
 
-    res = supabase.table("customers").select("*").execute()
-    if res.data:
-        df = pd.DataFrame(res.data)
+    fetch_limit = max(200, int(show_limit) * 5)
+    rows_data = fetch_table_cached("customers", limit=fetch_limit, order_col="id", desc=True)
+    if rows_data:
+        df = pd.DataFrame(rows_data)
 
         if demand_filter != "Hepsi" and "talep_türü" in df.columns:
             df = df[df["talep_türü"] == demand_filter]
@@ -786,10 +806,10 @@ elif choice == "Portföy Listesi":
         except:
             return None
 
-    def show_portfolio(table, key_prefix, q, min_amount, max_amount, only_with_images, limit_count):
-        res = supabase.table(table).select("*").execute()
-        if res.data:
-            rows = res.data
+    def show_portfolio(table, key_prefix, q, min_amount, max_amount, only_with_images, limit_count, show_thumbs):
+        fetch_limit = max(200, int(limit_count) * 5)
+        rows = fetch_table_cached(table, limit=fetch_limit, order_col="id", desc=True)
+        if rows:
 
             if q:
                 ql = q.strip().lower()
@@ -861,10 +881,16 @@ elif choice == "Portföy Listesi":
                     else:
                         col1, col2 = st.columns([1, 2])
                         with col1:
-                            urls = get_image_urls(row.get('image_urls'))
-                            if urls: st.image(get_full_image_url(urls[0]), use_container_width=True)
-                            elif row.get('resim_url'): st.image(get_full_image_url(row['resim_url']), use_container_width=True)
-                            else: st.info("Resim yok")
+                            if show_thumbs:
+                                urls = get_image_urls(row.get('image_urls'))
+                                if urls:
+                                    st.image(get_full_image_url(urls[0]), use_container_width=True)
+                                elif row.get('resim_url'):
+                                    st.image(get_full_image_url(row['resim_url']), use_container_width=True)
+                                else:
+                                    st.info("Resim yok")
+                            else:
+                                st.write("📷")
                         with col2:
                             st.write(f"**İlan No: {row['ilan_no']}**")
                             st.write(f"📍 {row['bölge_mahalle']}")
@@ -873,8 +899,22 @@ elif choice == "Portföy Listesi":
                             # Action Buttons
                             btn_col1, btn_col2, btn_col3 = st.columns(3)
                             with btn_col1:
-                                pdf_bytes = generate_pdf_bytes(row)
-                                st.download_button("📄 PDF", pdf_bytes, f"Sunum_{row['ilan_no']}.pdf", "application/pdf", key=f"pdf_{table}_{row['id']}", use_container_width=True)
+                                pdf_key = f"pf_pdf_bytes_{table}_{row['id']}"
+                                if pdf_key not in st.session_state:
+                                    st.session_state[pdf_key] = None
+                                if st.session_state[pdf_key] is None:
+                                    if st.button("📄 PDF Hazırla", key=f"prep_{pdf_key}", use_container_width=True):
+                                        st.session_state[pdf_key] = generate_pdf_bytes(row).getvalue()
+                                        st.rerun()
+                                else:
+                                    st.download_button(
+                                        "📄 PDF İndir",
+                                        st.session_state[pdf_key],
+                                        f"Sunum_{row['ilan_no']}.pdf",
+                                        "application/pdf",
+                                        key=f"dl_{pdf_key}",
+                                        use_container_width=True
+                                    )
                             with btn_col2:
                                 if st.button("📝 Düzenle", key=f"edit_port_btn_{table}_{row['id']}", use_container_width=True):
                                     st.session_state[f"edit_port_{table}_{row['id']}"] = True
@@ -899,7 +939,8 @@ elif choice == "Portföy Listesi":
             only_img1 = st.checkbox("Sadece Resimli", value=False, key="pf_img_satilik")
         with c4:
             lim1 = st.slider("Limit", min_value=10, max_value=200, value=50, step=10, key="pf_lim_satilik")
-        show_portfolio("satilik_konut", "satilik", q1, min1 if min1 > 0 else None, max1 if max1 > 0 else None, only_img1, lim1)
+        show_thumbs1 = st.checkbox("Önizleme Resimleri", value=False, key="pf_thumb_satilik")
+        show_portfolio("satilik_konut", "satilik", q1, min1 if min1 > 0 else None, max1 if max1 > 0 else None, only_img1, lim1, show_thumbs1)
 
     with t2:
         st.subheader("Filtreler")
@@ -913,7 +954,8 @@ elif choice == "Portföy Listesi":
             only_img2 = st.checkbox("Sadece Resimli", value=False, key="pf_img_kiralik")
         with c4:
             lim2 = st.slider("Limit", min_value=10, max_value=200, value=50, step=10, key="pf_lim_kiralik")
-        show_portfolio("kiralik_konut", "kiralik", q2, min2 if min2 > 0 else None, max2 if max2 > 0 else None, only_img2, lim2)
+        show_thumbs2 = st.checkbox("Önizleme Resimleri", value=False, key="pf_thumb_kiralik")
+        show_portfolio("kiralik_konut", "kiralik", q2, min2 if min2 > 0 else None, max2 if max2 > 0 else None, only_img2, lim2, show_thumbs2)
 
     with t3:
         st.subheader("Filtreler")
@@ -927,7 +969,8 @@ elif choice == "Portföy Listesi":
             only_img3 = st.checkbox("Sadece Resimli", value=False, key="pf_img_arsa")
         with c4:
             lim3 = st.slider("Limit", min_value=10, max_value=200, value=50, step=10, key="pf_lim_arsa")
-        show_portfolio("satilik_arsa", "arsa", q3, min3 if min3 > 0 else None, max3 if max3 > 0 else None, only_img3, lim3)
+        show_thumbs3 = st.checkbox("Önizleme Resimleri", value=False, key="pf_thumb_arsa")
+        show_portfolio("satilik_arsa", "arsa", q3, min3 if min3 > 0 else None, max3 if max3 > 0 else None, only_img3, lim3, show_thumbs3)
 
 elif choice == "Akıllı Eşleştirme":
     st.header("🎯 Akıllı Eşleştirme")
