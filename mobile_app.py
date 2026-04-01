@@ -94,7 +94,6 @@ def fetch_table_cached(table_name: str, limit: int, order_col: str = "id", desc:
     st.session_state[cache_key] = {"ts": now, "data": data}
     return data
 
-st.title(f"🏠 {config['company_name']}")
 st.subheader("Mobil Yönetim Paneli")
 
 menu = ["PDF Ayarları", "Yeni Müşteri", "Müşteri Listesi", "Yeni Satılık Konut", "Yeni Kiralık Konut", "Yeni Satılık Arsa", "Portföy Listesi", "Akıllı Eşleştirme"]
